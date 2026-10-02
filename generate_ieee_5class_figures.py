@@ -240,108 +240,84 @@ def generate_recall_curves_5class():
 # FIGURE 3: Inter-Patient Performance at Each Fold k (5 classes)
 # ===========================================================================
 def generate_interpatient_performance_5class():
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.0))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14.2, 5.2))
 
     x = np.arange(len(CLASSES_5))
-    w = 0.22
-    offsets = [-w, 0, w]
+    w = 0.19
+    offsets = [-0.23, 0.0, 0.23]
 
-    # --- Left Subplot: Recall at each k (k=1, k=2, k=3) ---
-    for i, fk in enumerate(FOLDS_KEYS):
-        vals = recalls_5class[fk]
-        bars = ax1.bar(
-            x + offsets[i],
-            vals,
-            width=w,
-            color=FOLD_COLORS[i],
-            label=FOLD_LABELS[i],
-            edgecolor="white",
-            linewidth=0.7,
-            zorder=3
-        )
-        # Value annotations above bars
-        for bar, val in zip(bars, vals):
-            if val > 1.5:
-                ax1.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + 1.2,
-                    f"{val:.1f}%",
-                    ha="center", va="bottom",
-                    fontsize=8.5, fontfamily="Times New Roman",
-                    color="#333333"
-                )
-            elif val == 0.0:
-                ax1.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    1.0,
-                    "0",
-                    ha="center", va="bottom",
-                    fontsize=8.5, fontfamily="Times New Roman",
-                    color="#777777"
-                )
+    # Subplot configurations
+    configs = [
+        (ax1, recalls_5class, "Class Recall / Sensitivity (%)", "(a) Class-Wise Recall / Sensitivity Across Folds"),
+        (ax2, f1_5class, "Class F1-Score (%)", "(b) Class-Wise F1-Score Across Folds")
+    ]
 
-    ax1.set_xlabel("AAMI Heartbeat Class", fontsize=13, fontfamily="Times New Roman")
-    ax1.set_ylabel("Class Recall / Sensitivity (%)", fontsize=13, fontfamily="Times New Roman")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(CLASSES_5, fontsize=12, fontfamily="Times New Roman", fontweight="bold")
-    ax1.set_ylim(0, 115)
-    ax1.yaxis.set_major_locator(mticker.MultipleLocator(20))
-    for tick in ax1.get_yticklabels():
-        tick.set_fontfamily("Times New Roman")
-        tick.set_fontsize(12)
+    for ax, data_dict, ylabel, subtitle in configs:
+        for i, fk in enumerate(FOLDS_KEYS):
+            vals = data_dict[fk]
+            bars = ax.bar(
+                x + offsets[i],
+                vals,
+                width=w,
+                color=FOLD_COLORS[i],
+                label=FOLD_LABELS[i],
+                edgecolor="#333333",
+                linewidth=0.6,
+                zorder=3
+            )
+            # Value annotations placed cleanly with zero horizontal overlap
+            for bar, val in zip(bars, vals):
+                cx = bar.get_x() + bar.get_width() / 2.0
+                if val >= 1.0:
+                    ax.text(
+                        cx, val + 1.8, f"{val:.1f}%",
+                        ha="center", va="bottom",
+                        fontsize=8.5, fontfamily="Times New Roman",
+                        fontweight="bold", color="#1A1A1A",
+                        rotation=90
+                    )
+                elif val > 0.0:
+                    ax.text(
+                        cx, val + 1.8, f"{val:.2f}%",
+                        ha="center", va="bottom",
+                        fontsize=8.0, fontfamily="Times New Roman",
+                        fontweight="bold", color="#1A1A1A",
+                        rotation=90
+                    )
+                else:
+                    ax.text(
+                        cx, 1.8, "0.0%",
+                        ha="center", va="bottom",
+                        fontsize=7.5, fontfamily="Times New Roman",
+                        color="#666666",
+                        rotation=90
+                    )
 
-    leg1 = ax1.legend(loc="upper right", framealpha=0.85, fontsize=11, edgecolor="#B0B0B0")
-    for text in leg1.get_texts():
-        text.set_fontfamily("Times New Roman")
+        ax.set_xlabel("AAMI Heartbeat Class", fontsize=13, fontfamily="Times New Roman", fontweight="bold")
+        ax.set_ylabel(ylabel, fontsize=13, fontfamily="Times New Roman", fontweight="bold")
+        ax.set_xticks(x)
+        ax.set_xticklabels(CLASSES_5, fontsize=13, fontfamily="Times New Roman", fontweight="bold")
+        ax.set_ylim(0, 120)
+        ax.yaxis.set_major_locator(mticker.MultipleLocator(20))
+        for tick in ax.get_yticklabels():
+            tick.set_fontfamily("Times New Roman")
+            tick.set_fontsize(12)
+        ax.grid(axis="y", linestyle="--", alpha=0.35, zorder=0)
 
-    # --- Right Subplot: F1-Score at each k (k=1, k=2, k=3) ---
-    for i, fk in enumerate(FOLDS_KEYS):
-        vals = f1_5class[fk]
-        bars = ax2.bar(
-            x + offsets[i],
-            vals,
-            width=w,
-            color=FOLD_COLORS[i],
-            label=FOLD_LABELS[i],
-            edgecolor="white",
-            linewidth=0.7,
-            zorder=3
-        )
-        for bar, val in zip(bars, vals):
-            if val > 1.5:
-                ax2.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + 1.2,
-                    f"{val:.1f}%",
-                    ha="center", va="bottom",
-                    fontsize=8.5, fontfamily="Times New Roman",
-                    color="#333333"
-                )
-            elif val == 0.0:
-                ax2.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    1.0,
-                    "0",
-                    ha="center", va="bottom",
-                    fontsize=8.5, fontfamily="Times New Roman",
-                    color="#777777"
-                )
+    # Clean, unified IEEE-style legend at the top
+    handles, labels = ax1.get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.05),
+        ncol=3,
+        framealpha=0.9,
+        fontsize=11.5,
+        edgecolor="#CCCCCC",
+        prop={"family": "Times New Roman"}
+    )
 
-    ax2.set_xlabel("AAMI Heartbeat Class", fontsize=13, fontfamily="Times New Roman")
-    ax2.set_ylabel("Class F1-Score (%)", fontsize=13, fontfamily="Times New Roman")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(CLASSES_5, fontsize=12, fontfamily="Times New Roman", fontweight="bold")
-    ax2.set_ylim(0, 115)
-    ax2.yaxis.set_major_locator(mticker.MultipleLocator(20))
-    for tick in ax2.get_yticklabels():
-        tick.set_fontfamily("Times New Roman")
-        tick.set_fontsize(12)
-
-    leg2 = ax2.legend(loc="upper right", framealpha=0.85, fontsize=11, edgecolor="#B0B0B0")
-    for text in leg2.get_texts():
-        text.set_fontfamily("Times New Roman")
-
-    fig.tight_layout(w_pad=3.0)
+    fig.tight_layout(w_pad=3.2)
     save_publication_figure(fig, "fig3_interpatient_performance_at_each_k_5class")
     plt.close(fig)
 
