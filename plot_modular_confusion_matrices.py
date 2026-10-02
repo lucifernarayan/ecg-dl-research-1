@@ -91,30 +91,30 @@ CMAP_MAGENTA = LinearSegmentedColormap.from_list(
 def plot_confusion_matrix_percentage(pct_matrix, colormap, colorbar_title, output_basename):
     """
     Renders and saves a 5x5 confusion matrix strictly in percentage format.
-    Every single parameter, label, font, and layout is 100% standardized.
+    Every single parameter, label, font, and layout is 100% standardized with large publication-grade fonts.
     """
-    fig, ax = plt.subplots(figsize=(6.4, 5.4))
+    fig, ax = plt.subplots(figsize=(7.6, 6.6))
     
     im = ax.imshow(pct_matrix, interpolation="nearest", cmap=colormap, vmin=0.0, vmax=100.0)
     
-    # Standardized colorbar
+    # Standardized colorbar with large font
     cbar = ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=10)
-    cbar.set_label(colorbar_title, fontsize=12, fontfamily="Times New Roman")
+    cbar.ax.tick_params(labelsize=13)
+    cbar.set_label(colorbar_title, fontsize=15, fontfamily="Times New Roman", fontweight="bold", labelpad=12)
     for tick in cbar.ax.get_yticklabels():
         tick.set_fontfamily("Times New Roman")
         
-    # Standardized tick marks & labels
+    # Standardized tick marks & labels with large bold font
     ax.set_xticks(np.arange(5))
     ax.set_yticks(np.arange(5))
-    ax.set_xticklabels(CLASSES_5, fontsize=12, fontfamily="Times New Roman", fontweight="bold")
-    ax.set_yticklabels(CLASSES_5, fontsize=12, fontfamily="Times New Roman", fontweight="bold")
+    ax.set_xticklabels(CLASSES_5, fontsize=15, fontfamily="Times New Roman", fontweight="bold")
+    ax.set_yticklabels(CLASSES_5, fontsize=15, fontfamily="Times New Roman", fontweight="bold")
     
-    # Standardized axes titles (requested format)
-    ax.set_xlabel("Predicted Class", fontsize=13, fontfamily="Times New Roman", fontweight="bold", labelpad=8)
-    ax.set_ylabel("Class Sensitivity / Recall (%)", fontsize=13, fontfamily="Times New Roman", fontweight="bold", labelpad=8)
+    # Standardized axes titles (prominent size for IEEE journal)
+    ax.set_xlabel("Predicted Class", fontsize=16, fontfamily="Times New Roman", fontweight="bold", labelpad=10)
+    ax.set_ylabel("Class Sensitivity / Recall (%)", fontsize=16, fontfamily="Times New Roman", fontweight="bold", labelpad=10)
     
-    # Strict percentage annotation in every cell
+    # Strict percentage annotation in every cell with large font
     threshold = 50.0
     for i in range(5):
         for j in range(5):
@@ -125,7 +125,7 @@ def plot_confusion_matrix_percentage(pct_matrix, colormap, colorbar_title, outpu
                 j, i, f"{val:.2f}%",
                 ha="center", va="center",
                 color=text_color,
-                fontsize=11,
+                fontsize=14,
                 fontfamily="Times New Roman",
                 fontweight=text_weight
             )
