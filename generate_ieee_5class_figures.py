@@ -98,8 +98,14 @@ f1_5class = {}
 
 for fk in FOLDS_KEYS:
     m = agg_data["individual_folds"][fk]["metrics"]
-    recalls_5class[fk] = m["per_class_recall"] + [0.0]  # [N, SVEB, VEB, F, Q]
-    f1_5class[fk]      = m["per_class_f1"] + [0.0]
+    rec_list = m["per_class_recall"]
+    f1_list = m["per_class_f1"]
+    if len(rec_list) == 5:
+        recalls_5class[fk] = rec_list
+        f1_5class[fk]      = f1_list
+    else:
+        recalls_5class[fk] = rec_list + [0.0]
+        f1_5class[fk]      = f1_list + [0.0]
 
 # Mean and Std across the 3 folds
 recalls_arr = np.array([recalls_5class[fk] for fk in FOLDS_KEYS])  # (3, 5)
@@ -176,12 +182,13 @@ def generate_radar_5class():
 def generate_recall_curves_5class():
     # Extract Fold 2 epoch-wise metrics (k=2 was the best fold)
     f2_logs = tlog_data["Fold 2"]
+    best_ep_f2 = agg_data["individual_folds"]["Fold 2"].get("best_epoch", 7)
     recalls_by_class = {
         "N":    [ep["n_recall"] for ep in f2_logs],
         "SVEB": [ep["sveb_recall"] for ep in f2_logs],
         "VEB":  [ep["veb_recall"] for ep in f2_logs],
         "F":    [ep["f_recall"] for ep in f2_logs],
-        "Q":    [0.0] * len(f2_logs),  # Q marked strictly as 0
+        "Q":    [ep.get("q_recall", 0.0) for ep in f2_logs],
     }
 
     class_plot_styles = {
@@ -189,7 +196,7 @@ def generate_recall_curves_5class():
         "SVEB": {"color": "#F08080", "ls": "-",  "marker": "s", "label": "Class SVEB"},
         "VEB":  {"color": "#3CB371", "ls": "-",  "marker": "^", "label": "Class VEB"},
         "F":    {"color": "#DEB887", "ls": "--", "marker": "d", "label": "Class F"},
-        "Q":    {"color": "#888888", "ls": ":",  "marker": "x", "label": "Class Q (0.0)"},
+        "Q":    {"color": "#888888", "ls": ":",  "marker": "x", "label": "Class Q"},
     }
 
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
@@ -207,8 +214,8 @@ def generate_recall_curves_5class():
             label=cfg["label"]
         )
 
-    # Highlight best epoch (Epoch 14 for Fold 2)
-    ax.axvline(x=14, color="#555555", linestyle=":", linewidth=1.5, alpha=0.8, label="Selected Epoch (14)")
+    # Highlight best epoch for Fold 2
+    ax.axvline(x=best_ep_f2, color="#555555", linestyle=":", linewidth=1.5, alpha=0.8, label=f"Selected Epoch ({best_ep_f2})")
 
     ax.set_xlabel("Training Epoch", fontsize=13, fontfamily="Times New Roman")
     ax.set_ylabel("Validation Recall (%)", fontsize=13, fontfamily="Times New Roman")

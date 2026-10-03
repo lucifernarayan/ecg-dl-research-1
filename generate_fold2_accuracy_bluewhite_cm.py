@@ -50,9 +50,12 @@ CLASSES_5 = ["N", "SVEB", "VEB", "F", "Q"]
 with open(FOLD2_METRICS_PATH, "r") as f:
     metrics = json.load(f)
 
-raw_4x4 = np.array(metrics["confusion_matrix"], dtype=float)
-raw_5x5 = np.zeros((5, 5), dtype=float)
-raw_5x5[:4, :4] = raw_4x4
+raw_mat = np.array(metrics["confusion_matrix"], dtype=float)
+if raw_mat.shape == (5, 5):
+    raw_5x5 = raw_mat
+else:
+    raw_5x5 = np.zeros((5, 5), dtype=float)
+    raw_5x5[:raw_mat.shape[0], :raw_mat.shape[1]] = raw_mat
 
 # Class accuracy / row-normalized percentages (%)
 row_sums = raw_5x5.sum(axis=1, keepdims=True)
