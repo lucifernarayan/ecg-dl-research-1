@@ -37,7 +37,8 @@ def generate_table_image():
     # Table data
     table_data = [
         ["Model Architecture", "Hybrid 1D-BiCNN-GRU"],
-        ["Trainable Parameters", "274k"],
+        ["Trainable Parameters", "257,541 (~257k) [Tuned from 578,309 baseline]"],
+        ["Parameter Compression Ratio", "55.5% reduction via Optuna hyperparameter tuning"],
         ["Input Signal Dimension", "1D ECG (256 samples, centered R-peak)"],
         ["Target Classes", "5 Classes (AAMI EC57: N, SVEB, VEB, F, Q)"],
         ["Loss Function", "Categorical Cross-Entropy"],
@@ -55,7 +56,7 @@ def generate_table_image():
 
     col_headers = ["Experimental Parameter / Specification", "Configuration Setting"]
 
-    fig, ax = plt.subplots(figsize=(10.0, 7.2))
+    fig, ax = plt.subplots(figsize=(10.4, 7.7))
     ax.axis("off")
     ax.axis("tight")
 
