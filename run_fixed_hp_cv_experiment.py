@@ -45,7 +45,8 @@ WEIGHT_DECAY = 7.114476e-4
 BATCH_SIZE = 128
 EPOCHS = 20
 
-CLASS_NAMES_ACTIVE = ["Normal (N)", "SVEB/A", "VEB/PVC", "Fusion (F/VT)"]
+CLASS_NAMES_5 = ["Normal (N)", "SVEB/A", "VEB/PVC", "Fusion (F/VT)", "Unknown (Q)"]
+CLASS_NAMES_ACTIVE = CLASS_NAMES_5
 
 
 class ECG1DDataset(Dataset):
@@ -136,41 +137,37 @@ def extract_ds1_beats(config_path: str = "config.yaml") -> dict:
 
 def calculate_active_metrics(y_true: np.ndarray, y_pred: np.ndarray):
     """
-    Computes active class (0, 1, 2, 3) metrics, excluding class 4 (Q).
+    Computes all 5 AAMI classes (0=N, 1=SVEB, 2=VEB, 3=F, 4=Q) metrics.
     """
-    # Exclude Q (class 4) samples
-    active_mask = (y_true != 4)
-    y_true_active = y_true[active_mask]
-    y_pred_active = y_pred[active_mask]
+    overall_acc = float(accuracy_score(y_true, y_pred) * 100.0)
 
-    active_acc = float(accuracy_score(y_true_active, y_pred_active) * 100.0)
-
-    # Compute per-class precision, recall, f1 for active classes 0, 1, 2, 3
+    # Compute per-class precision, recall, f1 for all 5 classes [0, 1, 2, 3, 4]
     precision, recall, f1, support = precision_recall_fscore_support(
-        y_true_active, y_pred_active, labels=[0, 1, 2, 3], zero_division=0
+        y_true, y_pred, labels=[0, 1, 2, 3, 4], zero_division=0
     )
 
-    active_macro_f1 = float(np.mean(f1) * 100.0)
-    minority_macro_f1 = float(np.mean(f1[1:4]) * 100.0)  # Classes 1, 2, 3
+    macro_f1 = float(np.mean(f1) * 100.0)
+    minority_macro_f1 = float(np.mean(f1[1:4]) * 100.0)  # Classes 1, 2, 3 (SVEB, VEB, F)
+    all_minority_macro_f1 = float(np.mean(f1[1:]) * 100.0)  # Classes 1, 2, 3, 4
     n_recall = float(recall[0] * 100.0)
 
     # FoldScore Calculation
-    # BaseScore = 0.50 * ActiveMacroF1 + 0.30 * MinorityMacroF1 + 0.20 * NRecall
-    # Penalty = 5.0 * max(0, 0.9650 - NRecall/100) (using percentage: 96.50 - NRecall)
-    base_score = 0.50 * active_macro_f1 + 0.30 * minority_macro_f1 + 0.20 * n_recall
+    base_score = 0.50 * macro_f1 + 0.30 * minority_macro_f1 + 0.20 * n_recall
     penalty = 5.0 * max(0.0, 96.50 - n_recall)
     fold_score = float(base_score - penalty)
 
-    cm = confusion_matrix(y_true_active, y_pred_active, labels=[0, 1, 2, 3])
+    cm = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3, 4])
 
     metrics = {
-        "active_accuracy": active_acc,
-        "active_macro_f1": active_macro_f1,
+        "active_accuracy": overall_acc,
+        "active_macro_f1": macro_f1,
         "minority_macro_f1": minority_macro_f1,
+        "all_minority_macro_f1": all_minority_macro_f1,
         "n_recall": n_recall,
         "sveb_recall": float(recall[1] * 100.0),
         "veb_recall": float(recall[2] * 100.0),
         "f_recall": float(recall[3] * 100.0),
+        "q_recall": float(recall[4] * 100.0),
         "per_class_precision": (precision * 100.0).tolist(),
         "per_class_recall": (recall * 100.0).tolist(),
         "per_class_f1": (f1 * 100.0).tolist(),
@@ -180,17 +177,17 @@ def calculate_active_metrics(y_true: np.ndarray, y_pred: np.ndarray):
         "fold_score": fold_score,
         "confusion_matrix": cm.tolist()
     }
-    return metrics, cm, y_true_active, y_pred_active
+    return metrics, cm, y_true, y_pred
 
 
 def save_confusion_matrix_plot(cm: np.ndarray, title: str, save_path: Path):
-    """Plots and saves normalized confusion matrix."""
+    """Plots and saves normalized confusion matrix for all 5 AAMI classes."""
     cm_sum = cm.sum(axis=1, keepdims=True)
     cm_norm = np.divide(cm.astype('float'), cm_sum, out=np.zeros_like(cm, dtype=float), where=cm_sum!=0)
 
-    plt.figure(figsize=(7, 6))
+    plt.figure(figsize=(7.5, 6.5))
     sns.heatmap(cm_norm, annot=True, fmt=".2%", cmap="Blues", 
-                xticklabels=CLASS_NAMES_ACTIVE, yticklabels=CLASS_NAMES_ACTIVE, square=True)
+                xticklabels=CLASS_NAMES_5, yticklabels=CLASS_NAMES_5, square=True)
     plt.title(title, fontsize=11, pad=12)
     plt.xlabel("Predicted Class", fontsize=10)
     plt.ylabel("True AAMI Class", fontsize=10)
@@ -291,31 +288,28 @@ def run_experiment():
         for c in range(5):
             print(f"    Class {c} ({'N' if c==0 else 'SVEB' if c==1 else 'VEB' if c==2 else 'F' if c==3 else 'Q'}): {raw_class_counts[c]:,}")
 
-        # Active classes: 0, 1, 2, 3
+        # Active classes: 0, 1, 2, 3, 4 (All 5 AAMI classes)
         # w_c = (1 / N_c) ** 0.7320
         class_weights = {}
-        for c in range(4):
+        for c in range(5):
             N_c = raw_class_counts[c]
             class_weights[c] = (1.0 / N_c) ** SAMPLING_ALPHA if N_c > 0 else 0.0
-        class_weights[4] = 0.0  # Q weight = 0
 
         print(f"\n[*] Calculated Class Weights (w_c = (1/N_c)^{SAMPLING_ALPHA}):")
         for c in range(5):
-            print(f"    Class {c}: {class_weights[c]:.8f}")
+            print(f"    Class {c} ({CLASS_NAMES_5[c]}): {class_weights[c]:.8f}")
 
-        # Theoretical sampling proportions for active classes 0..3
-        denom = sum(class_weights[c] * raw_class_counts[c] for c in range(4))
-        theo_props = {c: (class_weights[c] * raw_class_counts[c]) / denom for c in range(4)}
-        theo_props[4] = 0.0
+        # Theoretical sampling proportions for all 5 classes
+        denom = sum(class_weights[c] * raw_class_counts[c] for c in range(5))
+        theo_props = {c: (class_weights[c] * raw_class_counts[c]) / denom for c in range(5)}
 
-        print(f"\n[*] Theoretical Sampler Proportions (Active Classes):")
-        for c in range(4):
-            print(f"    Class {c}: {theo_props[c] * 100.0:.2f}%")
-        print(f"    Class 4 (Q): {theo_props[4]:.2f}%")
+        print(f"\n[*] Theoretical Sampler Proportions (All 5 Classes):")
+        for c in range(5):
+            print(f"    Class {c} ({CLASS_NAMES_5[c]}): {theo_props[c] * 100.0:.2f}%")
 
-        # Number of active training samples = N0 + N1 + N2 + N3
-        N_active_train = sum(raw_class_counts[c] for c in range(4))
-        print(f"\n[*] Active Training Samples (N_active_train): {N_active_train:,}")
+        # Number of training samples across all 5 classes
+        N_train = sum(raw_class_counts[c] for c in range(5))
+        print(f"\n[*] Total Training Samples (N_train): {N_train:,}")
 
         # Per-sample weights
         sample_weights = np.array([class_weights[int(label)] for label in y_train], dtype=np.float64)
@@ -323,7 +317,7 @@ def run_experiment():
         # WeightedRandomSampler for Training
         sampler = WeightedRandomSampler(
             weights=torch.tensor(sample_weights, dtype=torch.double),
-            num_samples=N_active_train,
+            num_samples=N_train,
             replacement=True
         )
 
@@ -349,10 +343,7 @@ def run_experiment():
         
         print(f"\n[*] Empirical Sampler Proportions (Epoch 1 Drawn Samples - Total: {len(epoch1_sampled_labels):,}):")
         for c in range(5):
-            print(f"    Class {c}: {emp_props[c]:.2f}% ({emp_counts[c]:,} samples)")
-
-        assert emp_counts[4] == 0, "CRITICAL ERROR: Q class (Class 4) was sampled! Q weight must be 0."
-        print("[OK] Safety Assertion Passed: Q class sampling count is EXACTLY ZERO.")
+            print(f"    Class {c} ({CLASS_NAMES_5[c]}): {emp_props[c]:.2f}% ({emp_counts[c]:,} samples)")
 
         # INITIALIZE FRESH MODEL FOR THIS FOLD
         model = GenericHybrid1DBiCNNGRU(
@@ -365,7 +356,7 @@ def run_experiment():
             num_classes=5
         ).to(device)
 
-        criterion = nn.CrossEntropyLoss(ignore_index=4)
+        criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
         best_fold_score = -1e9
@@ -427,19 +418,24 @@ def run_experiment():
                 "active_accuracy": metrics["active_accuracy"],
                 "active_macro_f1": metrics["active_macro_f1"],
                 "minority_macro_f1": metrics["minority_macro_f1"],
+                "all_minority_macro_f1": metrics["all_minority_macro_f1"],
                 "n_recall": metrics["n_recall"],
                 "sveb_recall": metrics["sveb_recall"],
                 "veb_recall": metrics["veb_recall"],
                 "f_recall": metrics["f_recall"],
+                "q_recall": metrics["q_recall"],
                 "fold_score": metrics["fold_score"]
             }
             fold_log.append(epoch_summary)
 
             print(f" Ep [{epoch:02d}/{EPOCHS:02d}] Train Loss: {avg_train_loss:.4f} | "
-                  f"Val Act Acc: {metrics['active_accuracy']:.2f}% | "
+                  f"Acc: {metrics['active_accuracy']:.2f}% | "
                   f"Macro F1: {metrics['active_macro_f1']:.2f}% | "
-                  f"Minority F1: {metrics['minority_macro_f1']:.2f}% | "
                   f"N Rec: {metrics['n_recall']:.2f}% | "
+                  f"SVEB: {metrics['sveb_recall']:.2f}% | "
+                  f"VEB: {metrics['veb_recall']:.2f}% | "
+                  f"F: {metrics['f_recall']:.2f}% | "
+                  f"Q: {metrics['q_recall']:.2f}% | "
                   f"Score: {metrics['fold_score']:.2f}")
 
             # Checkpoint Model Selection
@@ -518,6 +514,7 @@ def run_experiment():
     sveb_recs = [fold_results[f]["metrics"]["sveb_recall"] for f in FOLDS]
     veb_recs = [fold_results[f]["metrics"]["veb_recall"] for f in FOLDS]
     f_recs = [fold_results[f]["metrics"]["f_recall"] for f in FOLDS]
+    q_recs = [fold_results[f]["metrics"]["q_recall"] for f in FOLDS]
     scores = [fold_results[f]["metrics"]["fold_score"] for f in FOLDS]
 
     aggregate_summary = {
@@ -530,6 +527,7 @@ def run_experiment():
             "sveb_recall": {"mean": float(np.mean(sveb_recs)), "std": float(np.std(sveb_recs))},
             "veb_recall": {"mean": float(np.mean(veb_recs)), "std": float(np.std(veb_recs))},
             "f_recall": {"mean": float(np.mean(f_recs)), "std": float(np.std(f_recs))},
+            "q_recall": {"mean": float(np.mean(q_recs)), "std": float(np.std(q_recs))},
             "fold_score": {"mean": float(np.mean(scores)), "std": float(np.std(scores))}
         }
     }
@@ -539,29 +537,29 @@ def run_experiment():
         json.dump(aggregate_summary, f, indent=4)
     print(f"[*] Saved aggregate metrics JSON to '{agg_json_path}'")
 
-    # AGGREGATE CONFUSION MATRIX
+    # AGGREGATE CONFUSION MATRIX (All 5 classes)
     concat_true = np.concatenate(all_fold_true_active, axis=0)
     concat_pred = np.concatenate(all_fold_pred_active, axis=0)
-    agg_cm = confusion_matrix(concat_true, concat_pred, labels=[0, 1, 2, 3])
+    agg_cm = confusion_matrix(concat_true, concat_pred, labels=[0, 1, 2, 3, 4])
     
     agg_cm_path = results_dir / "fixed_hp_confusion_matrix_aggregate.png"
-    save_confusion_matrix_plot(agg_cm, "Aggregate 3-Fold Validation Active Confusion Matrix", agg_cm_path)
+    save_confusion_matrix_plot(agg_cm, "Aggregate 3-Fold Validation 5-Class Confusion Matrix", agg_cm_path)
 
     total_duration = time.time() - start_total_time
 
     # FINAL CONCISE TABLE SUMMARY
-    print("\n" + "=" * 105)
-    print("                   FIXED-HYPERPARAMETER 3-FOLD CV FINAL SUMMARY TABLE                   ")
-    print("=" * 105)
-    print(f"{'Fold':<8} | {'Best Ep':<7} | {'Active Acc':<10} | {'Macro F1':<9} | {'Minority F1':<11} | {'N Recall':<9} | {'SVEB Rec':<9} | {'VEB Rec':<8} | {'F Rec':<7} | {'Score':<7}")
-    print("-" * 105)
+    print("\n" + "=" * 115)
+    print("                   FIXED-HYPERPARAMETER 3-FOLD CV FINAL SUMMARY TABLE (5 CLASSES)                   ")
+    print("=" * 115)
+    print(f"{'Fold':<8} | {'Best Ep':<7} | {'Accuracy':<10} | {'Macro F1':<9} | {'Minority F1':<11} | {'N Recall':<9} | {'SVEB Rec':<9} | {'VEB Rec':<8} | {'F Rec':<7} | {'Q Rec':<7} | {'Score':<7}")
+    print("-" * 115)
 
     for fname in FOLDS:
         res = fold_results[fname]
         m = res["metrics"]
-        print(f"{fname:<8} | #{res['best_epoch']:<6} | {m['active_accuracy']:>9.2f}% | {m['active_macro_f1']:>8.2f}% | {m['minority_macro_f1']:>10.2f}% | {m['n_recall']:>8.2f}% | {m['sveb_recall']:>8.2f}% | {m['veb_recall']:>7.2f}% | {m['f_recall']:>6.2f}% | {m['fold_score']:>6.2f}")
+        print(f"{fname:<8} | #{res['best_epoch']:<6} | {m['active_accuracy']:>9.2f}% | {m['active_macro_f1']:>8.2f}% | {m['minority_macro_f1']:>10.2f}% | {m['n_recall']:>8.2f}% | {m['sveb_recall']:>8.2f}% | {m['veb_recall']:>7.2f}% | {m['f_recall']:>6.2f}% | {m['q_recall']:>6.2f}% | {m['fold_score']:>6.2f}")
 
-    print("-" * 105)
+    print("-" * 115)
     am = aggregate_summary["aggregate_metrics"]
     print(f"{'Mean±Std':<8} | {'-':<7} | "
           f"{am['active_accuracy']['mean']:.2f}±{am['active_accuracy']['std']:.2f}% | "
@@ -571,8 +569,9 @@ def run_experiment():
           f"{am['sveb_recall']['mean']:.2f}±{am['sveb_recall']['std']:.2f}% | "
           f"{am['veb_recall']['mean']:.2f}±{am['veb_recall']['std']:.2f}% | "
           f"{am['f_recall']['mean']:.2f}±{am['f_recall']['std']:.2f}% | "
+          f"{am['q_recall']['mean']:.2f}±{am['q_recall']['std']:.2f}% | "
           f"{am['fold_score']['mean']:.2f}±{am['fold_score']['std']:.2f}")
-    print("=" * 105 + "\n")
+    print("=" * 115 + "\n")
 
     print(f"[*] Total Experiment Runtime: {total_duration / 60.0:.2f} minutes")
     print(f"[*] Saved Checkpoints: checkpoints/fixed_hp_fold[1-3]_best.pth")
